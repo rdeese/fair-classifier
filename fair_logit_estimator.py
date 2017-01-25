@@ -73,14 +73,13 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         x_control = {'foo': X[:,self.sensitive_col_idx]}
         X = np.delete(X, self.sensitive_col_idx, 1)
 
-        apply_fairness_constraints = 0 if self.constraint == 'fairness' else 0
-        apply_accuracy_constraint = 0 if self.constraint == 'accuracy' else 0
+        apply_fairness_constraints = 1 if self.constraint == 'fairness' else 0
+        apply_accuracy_constraint = 1 if self.constraint == 'accuracy' else 0
         sep_constraint = 0 # currently not using this mode
         sensitive_attrs = ["foo"] # doesn't matter what we name this since there
                                   # can only be one
         sensitive_attrs_to_cov_thresh = {'foo': self.covariance_tolerance}
 
-        print("fitting")
         self.w_ = utils.train_model(X, y, x_control, log_loss,
                                     apply_fairness_constraints,
                                     apply_accuracy_constraint,
@@ -88,7 +87,6 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
                                     sensitive_attrs, sensitive_attrs_to_cov_thresh,
                                     self.accuracy_tolerance)
 
-        print("w_ is", self.w_)
         # Return the estimator
         return self
 
@@ -110,3 +108,23 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         X = np.delete(X, self.sensitive_col_idx, 1)
 
         return np.sign(np.dot(X, self.w_))
+
+    def predict_proba(self, X):
+        check_is_fitted(self, ['w_'])
+        X = check_array(X)
+
+        # remove sensitive col from test input
+        X = np.delete(X, self.sensitive_col_idx, 1)
+
+        probs = np.dot(X, self.w_)
+
+        return np.array([(probs*-1+1)/2, (probs+1)/2])
+
+    def boundary_distances(self, X):
+        check_is_fitted(self, ['w_'])
+        X = check_array(X)
+
+        # remove sensitive col from test input
+        X = np.delete(X, self.sensitive_col_idx, 1)
+
+        return np.dot(X, self.w_)

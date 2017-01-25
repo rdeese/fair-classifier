@@ -35,16 +35,19 @@ def test_adult_data():
 	sensitive_attrs_to_cov_thresh = {}
 	gamma = None
 
-	def train_test_classifier():
-            w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
-            print("w is", w)
-            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
-            distances_boundary_test = (np.dot(x_test, w)).tolist()
+        def print_classifier_metrics(w, test_score, distances_boundary_test):
             all_class_labels_assigned_test = np.sign(distances_boundary_test)
             correlation_dict_test = ut.get_correlations(None, None, all_class_labels_assigned_test, x_control_test, sensitive_attrs)
             cov_dict_test = ut.print_covariance_sensitive_attrs(None, x_test, distances_boundary_test, x_control_test, sensitive_attrs)
             p_rule = ut.print_classifier_fairness_stats([test_score], [correlation_dict_test], [cov_dict_test], sensitive_attrs[0])	
             return w, p_rule, test_score
+
+
+	def train_test_classifier():
+            w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
+            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
+            distances_boundary_test = (np.dot(x_test, w)).tolist()
+            return print_classifier_metrics(w, test_score, distances_boundary_test)
 
         def train_test_fair_logit():
             constraint = "none"
@@ -68,8 +71,9 @@ def test_adult_data():
             y_test_predicted = fle.predict(x_test_dummy)
 
             train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy_from_results(y_train, y_test, y_train_predicted, y_test_predicted)
-            print("training score: %0.2f" % (train_score))
-            print("test score: %0.2f" % (test_score))
+            distances_boundary_test = fle.boundary_distances(x_test_dummy).tolist()
+            return print_classifier_metrics(fle.w_, test_score, distances_boundary_test)
+
 
 	""" Classify the data while optimizing for accuracy """
 	print
@@ -78,8 +82,8 @@ def test_adult_data():
 	apply_fairness_constraints = 0
 	apply_accuracy_constraint = 0
 	sep_constraint = 0
-        train_test_fair_logit()
-	w_uncons, p_uncons, acc_uncons = train_test_classifier()
+        # train_test_fair_logit()
+	# w_uncons, p_uncons, acc_uncons = train_test_classifier()
 	
 	""" Now classify such that we optimize for accuracy while achieving perfect fairness """
 	apply_fairness_constraints = 1 # set this flag to one since we want to optimize accuracy subject to fairness constraints
@@ -88,8 +92,8 @@ def test_adult_data():
 	sensitive_attrs_to_cov_thresh = {"sex":0}
 	print
 	print "== Classifier with fairness constraint =="
-        train_test_fair_logit()
-	w_f_cons, p_f_cons, acc_f_cons  = train_test_classifier()
+        # train_test_fair_logit()
+	# w_f_cons, p_f_cons, acc_f_cons  = train_test_classifier()
 
 	
 
@@ -99,6 +103,7 @@ def test_adult_data():
 	sep_constraint = 0
 	gamma = 0.5 # gamma controls how much loss in accuracy we are willing to incur to achieve fairness -- increase gamme to allow more loss in accuracy
 	print "== Classifier with accuracy constraint =="
+        train_test_fair_logit()
 	w_a_cons, p_a_cons, acc_a_cons = train_test_classifier()	
 
 	""" 
