@@ -70,7 +70,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
         # remove sensitive column to separate array
-        x_control = {'foo': np.delete(X, self.sensitive_col_idx, 1)}
+        x_control = {'foo': X[:,self.sensitive_col_idx]}
+        X = np.delete(X, self.sensitive_col_idx, 1)
 
         apply_fairness_constraints = 0 if self.constraint == 'fairness' else 0
         apply_accuracy_constraint = 0 if self.constraint == 'accuracy' else 0
@@ -87,6 +88,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
                                     sensitive_attrs, sensitive_attrs_to_cov_thresh,
                                     self.accuracy_tolerance)
 
+        print("w_ is", self.w_)
         # Return the estimator
         return self
 
@@ -103,5 +105,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         """
         check_is_fitted(self, ['w_'])
         X = check_array(X)
+
+        # remove sensitive col from test input
+        X = np.delete(X, self.sensitive_col_idx, 1)
 
         return np.sign(np.dot(X, self.w_))

@@ -319,6 +319,12 @@ def get_one_hot_encoding(in_arr):
 
     return np.array(out_arr), index_dict
 
+def get_accuracy(y, Y_predicted):
+    correct_answers = (Y_predicted == y).astype(int) # will have 1 when the prediction and the actual label match
+    accuracy = float(sum(correct_answers)) / float(len(correct_answers))
+    return accuracy, sum(correct_answers)
+
+
 def check_accuracy(model, x_train, y_train, x_test, y_test, y_train_predicted, y_test_predicted):
 
 
@@ -335,15 +341,17 @@ def check_accuracy(model, x_train, y_train, x_test, y_test, y_train_predicted, y
         y_test_predicted = np.sign(np.dot(x_test, model))
         y_train_predicted = np.sign(np.dot(x_train, model))
 
-    def get_accuracy(y, Y_predicted):
-        correct_answers = (Y_predicted == y).astype(int) # will have 1 when the prediction and the actual label match
-        accuracy = float(sum(correct_answers)) / float(len(correct_answers))
-        return accuracy, sum(correct_answers)
-
     train_score, correct_answers_train = get_accuracy(y_train, y_train_predicted)
     test_score, correct_answers_test = get_accuracy(y_test, y_test_predicted)
 
     return train_score, test_score, correct_answers_train, correct_answers_test
+
+def check_accuracy_from_results(y_train, y_test, y_train_predicted, y_test_predicted):
+    train_score, correct_answers_train = get_accuracy(y_train, y_train_predicted)
+    test_score, correct_answers_test = get_accuracy(y_test, y_test_predicted)
+
+    return train_score, test_score, correct_answers_train, correct_answers_test
+
 
 def test_sensitive_attr_constraint_cov(model, x_arr, y_arr_dist_boundary, x_control, thresh, verbose):
 

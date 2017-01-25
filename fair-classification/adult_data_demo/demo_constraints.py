@@ -36,31 +36,40 @@ def test_adult_data():
 	gamma = None
 
 	def train_test_classifier():
-		w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
-		train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
-		distances_boundary_test = (np.dot(x_test, w)).tolist()
-		all_class_labels_assigned_test = np.sign(distances_boundary_test)
-		correlation_dict_test = ut.get_correlations(None, None, all_class_labels_assigned_test, x_control_test, sensitive_attrs)
-		cov_dict_test = ut.print_covariance_sensitive_attrs(None, x_test, distances_boundary_test, x_control_test, sensitive_attrs)
-		p_rule = ut.print_classifier_fairness_stats([test_score], [correlation_dict_test], [cov_dict_test], sensitive_attrs[0])	
-		return w, p_rule, test_score
+            w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
+            print("w is", w)
+            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
+            distances_boundary_test = (np.dot(x_test, w)).tolist()
+            all_class_labels_assigned_test = np.sign(distances_boundary_test)
+            correlation_dict_test = ut.get_correlations(None, None, all_class_labels_assigned_test, x_control_test, sensitive_attrs)
+            cov_dict_test = ut.print_covariance_sensitive_attrs(None, x_test, distances_boundary_test, x_control_test, sensitive_attrs)
+            p_rule = ut.print_classifier_fairness_stats([test_score], [correlation_dict_test], [cov_dict_test], sensitive_attrs[0])	
+            return w, p_rule, test_score
 
         def train_test_fair_logit():
             constraint = "none"
+            sensitive_col_idx = 0
             if apply_fairness_constraints == 1: constraint = "fairness" 
             if apply_accuracy_constraint == 1: constraint = "accuracy" 
-            x_train_copy = np.copy(x_train)
-            np.insert(x_train_copy, 0, values=x_control_train['sex'], axis=1)
+            x_train_copy = np.insert(x_train, sensitive_col_idx,
+                                     values=x_control_train['sex'], axis=1)
 
             covariance_tolerance = sensitive_attrs_to_cov_thresh['sex'] if 'sex' in sensitive_attrs_to_cov_thresh else 0
             fle = FairLogitEstimator(constraint=constraint,
-                                     sensitive_col_idx=0,
+                                     sensitive_col_idx=sensitive_col_idx,
                                      covariance_tolerance=covariance_tolerance,
                                      accuracy_tolerance = gamma)
-            fle.fit(x_train, y_train)
+            fle.fit(x_train_copy, y_train)
 
+            # add dummy sensitive column to test x data
+            x_test_dummy = np.insert(x_test, sensitive_col_idx, values=0, axis=1)
 
+            y_train_predicted = fle.predict(x_train_copy)
+            y_test_predicted = fle.predict(x_test_dummy)
 
+            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy_from_results(y_train, y_test, y_train_predicted, y_test_predicted)
+            print("training score: %0.2f" % (train_score))
+            print("test score: %0.2f" % (test_score))
 
 	""" Classify the data while optimizing for accuracy """
 	print
@@ -79,6 +88,7 @@ def test_adult_data():
 	sensitive_attrs_to_cov_thresh = {"sex":0}
 	print
 	print "== Classifier with fairness constraint =="
+        train_test_fair_logit()
 	w_f_cons, p_f_cons, acc_f_cons  = train_test_classifier()
 
 	
