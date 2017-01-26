@@ -2,8 +2,10 @@ import os,sys
 import numpy as np
 from generate_synthetic_data import *
 sys.path.insert(0, '../fair_classification/') # the code for fair classification is in this directory
+sys.path.append('../..') # for FairLogitEstimator
 import utils as ut
 import loss_funcs as lf # loss funcs that can be optimized subject to various constraints
+from fair_logit_estimator import FairLogitEstimator
 
 
 
@@ -30,16 +32,43 @@ def test_synthetic_data():
 	sensitive_attrs_to_cov_thresh = {}
 	gamma = None
 
-	def train_test_classifier():
-		w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
-		train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
-		distances_boundary_test = (np.dot(x_test, w)).tolist()
-		all_class_labels_assigned_test = np.sign(distances_boundary_test)
-		correlation_dict_test = ut.get_correlations(None, None, all_class_labels_assigned_test, x_control_test, sensitive_attrs)
-		cov_dict_test = ut.print_covariance_sensitive_attrs(None, x_test, distances_boundary_test, x_control_test, sensitive_attrs)
-		p_rule = ut.print_classifier_fairness_stats([test_score], [correlation_dict_test], [cov_dict_test], sensitive_attrs[0])	
-		return w, p_rule, test_score
+        def print_classifier_metrics(w, test_score, distances_boundary_test):
+            all_class_labels_assigned_test = np.sign(distances_boundary_test)
+            correlation_dict_test = ut.get_correlations(None, None, all_class_labels_assigned_test, x_control_test, sensitive_attrs)
+            cov_dict_test = ut.print_covariance_sensitive_attrs(None, x_test, distances_boundary_test, x_control_test, sensitive_attrs)
+            p_rule = ut.print_classifier_fairness_stats([test_score], [correlation_dict_test], [cov_dict_test], sensitive_attrs[0])	
+            return w, p_rule, test_score
 
+	def train_test_classifier():
+            w = ut.train_model(x_train, y_train, x_control_train, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma)
+            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy(w, x_train, y_train, x_test, y_test, None, None)
+            distances_boundary_test = (np.dot(x_test, w)).tolist()
+            return print_classifier_metrics(w, test_score, distances_boundary_test)
+
+        def train_test_fair_logit():
+            constraint = "none"
+            sensitive_col_idx = 0
+            if apply_fairness_constraints == 1: constraint = "fairness" 
+            if apply_accuracy_constraint == 1: constraint = "accuracy" 
+            x_train_copy = np.insert(x_train, sensitive_col_idx,
+                                     values=x_control_train['s1'], axis=1)
+
+            covariance_tolerance = sensitive_attrs_to_cov_thresh['s1'] if 'sex' in sensitive_attrs_to_cov_thresh else 0
+            fle = FairLogitEstimator(constraint=constraint,
+                                     sensitive_col_idx=sensitive_col_idx,
+                                     covariance_tolerance=covariance_tolerance,
+                                     accuracy_tolerance = gamma)
+            fle.fit(x_train_copy, y_train)
+
+            # add dummy sensitive column to test x data
+            x_test_dummy = np.insert(x_test, sensitive_col_idx, values=0, axis=1)
+
+            y_train_predicted = fle.predict(x_train_copy)
+            y_test_predicted = fle.predict(x_test_dummy)
+
+            train_score, test_score, correct_answers_train, correct_answers_test = ut.check_accuracy_from_results(y_train, y_test, y_train_predicted, y_test_predicted)
+            distances_boundary_test = fle.boundary_distances(x_test_dummy).tolist()
+            return print_classifier_metrics(fle.w_, test_score, distances_boundary_test)
 
 	def plot_boundaries(w1, w2, p1, p2, acc1, acc2, fname):
 
@@ -82,6 +111,9 @@ def test_synthetic_data():
 	apply_fairness_constraints = 0
 	apply_accuracy_constraint = 0
 	sep_constraint = 0
+        print "= Sklearn ="
+        train_test_fair_logit()
+        print "= Original ="
 	w_uncons, p_uncons, acc_uncons = train_test_classifier()
 	
 	""" Now classify such that we optimize for accuracy while achieving perfect fairness """
@@ -91,8 +123,11 @@ def test_synthetic_data():
 	sensitive_attrs_to_cov_thresh = {"s1":0}
 	print
 	print "== Classifier with fairness constraint =="
+        print "= Sklearn ="
+        train_test_fair_logit()
+        print "= Original ="
 	w_f_cons, p_f_cons, acc_f_cons  = train_test_classifier()
-	plot_boundaries(w_uncons, w_f_cons, p_uncons, p_f_cons, acc_uncons, acc_f_cons, "img/f_cons.png")
+	# plot_boundaries(w_uncons, w_f_cons, p_uncons, p_f_cons, acc_uncons, acc_f_cons, "img/f_cons.png")
 
 
 	""" Classify such that we optimize for fairness subject to a certain loss in accuracy """
@@ -101,8 +136,11 @@ def test_synthetic_data():
 	sep_constraint = 0
 	gamma = 0.5 # gamma controls how much loss in accuracy we are willing to incur to achieve fairness -- increase gamme to allow more loss in accuracy
 	print "== Classifier with accuracy constraint =="
+        print "= Sklearn ="
+        train_test_fair_logit()
+        print "= Original ="
 	w_a_cons, p_a_cons, acc_a_cons = train_test_classifier()	
-	plot_boundaries(w_uncons, w_a_cons, p_uncons, p_a_cons, acc_uncons, acc_a_cons, "img/a_cons.png")
+	# plot_boundaries(w_uncons, w_a_cons, p_uncons, p_a_cons, acc_uncons, acc_a_cons, "img/a_cons.png")
 
 	""" 
 	Classify such that we optimize for fairness subject to a certain loss in accuracy 
@@ -114,8 +152,11 @@ def test_synthetic_data():
 	sep_constraint = 1 # set the separate constraint flag to one, since in addition to accuracy constrains, we also want no misclassifications for certain points (details in demo README.md)
 	gamma = 2000.0
 	print "== Classifier with accuracy constraint (no +ve misclassification) =="
+        print "= Sklearn ="
+        train_test_fair_logit()
+        print "= Original ="
 	w_a_cons_fine, p_a_cons_fine, acc_a_cons_fine  = train_test_classifier()
-	plot_boundaries(w_uncons, w_a_cons_fine, p_uncons, p_a_cons_fine, acc_uncons, acc_a_cons_fine, "img/a_cons_fine.png")
+	# plot_boundaries(w_uncons, w_a_cons_fine, p_uncons, p_a_cons_fine, acc_uncons, acc_a_cons_fine, "img/a_cons_fine.png")
 
 	return
 
