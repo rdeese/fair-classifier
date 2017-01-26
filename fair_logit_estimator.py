@@ -70,7 +70,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
         # remove sensitive column to separate array
-        x_control = {'foo': X[:,self.sensitive_col_idx]}
+        x_control = {'foo': X[:, self.sensitive_col_idx]}
         X = np.delete(X, self.sensitive_col_idx, 1)
 
         apply_fairness_constraints = 1 if self.constraint == 'fairness' else 0
@@ -91,7 +91,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         return self
 
     def predict(self, X):
-        """ A reference implementation of a predicting function.
+        """ Predicts labels for all samples in X
+
         Parameters
         ----------
         X : array-like of shape = [n_samples, n_features]
@@ -110,6 +111,17 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         return np.sign(np.dot(X, self.w_))
 
     def predict_proba(self, X):
+        """ Gives probability estimates of each label, for all samples in X
+
+        Parameters
+        ----------
+        X : array-like, shape = [n_samples, n_features]
+        Returns
+        -------
+        T : array-like, shape = [n_samples, n_classes]
+            Returns the probability of the sample for each class in the model,
+            where classes are ordered as they are in ``self.classes_``.
+        """
         check_is_fitted(self, ['w_'])
         X = check_array(X)
 
@@ -121,6 +133,9 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         return np.array([(probs*-1+1)/2, (probs+1)/2])
 
     def boundary_distances(self, X):
+        """ Returns the dot product of each sample in X
+        with w.
+        """
         check_is_fitted(self, ['w_'])
         X = check_array(X)
 
