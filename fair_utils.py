@@ -1,20 +1,20 @@
-import numpy as np
-from random import seed, shuffle
-import loss_funcs as lf # our implementation of loss funcs
-from scipy.optimize import minimize # for loss func minimization
-from multiprocessing import Pool, Process, Queue
-from collections import defaultdict
+""" Utility functions for the fair_logit_estimator """
 from copy import deepcopy
-# import matplotlib.pyplot as plt # for plotting stuff
-import sys
+from random import seed
+import numpy as np
+from scipy.optimize import minimize # for loss func minimization
 
 SEED = 1122334455
 seed(SEED) # set the random seed so that the random permutations can be reproduced again
 np.random.seed(SEED)
 
 
+# pylint: disable=line-too-long
+# pylint: disable=too-many-arguments
+# pylint: disable=invalid-name
+# pylint: disable=too-many-locals
 
-def train_model(x, y, x_control, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma=None):
+def train_model(x, y, x_control, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma=None):
 
     """
 
@@ -32,13 +32,10 @@ def train_model(x, y, x_control, loss_function, apply_fairness_constraints, appl
     loss_function: the loss function that we want to optimize -- for now we have implementation of logistic loss, but other functions like hinge loss can also be added
     apply_fairness_constraints: optimize accuracy subject to fairness constraint (0/1 values)
     apply_accuracy_constraint: optimize fairness subject to accuracy constraint (0/1 values)
-    sep_constraint: apply the fine grained accuracy constraint
-        for details, see Section 3.3 of arxiv.org/abs/1507.05259v3
-        For examples on how to apply these constraints, see "synthetic_data_demo/decision_boundary_demo.py"
     Note: both apply_fairness_constraints and apply_accuracy_constraint cannot be 1 at the same time
     sensitive_attrs: ["s1", "s2", ...], list of sensitive features for which to apply fairness constraint, all of these sensitive features should have a corresponding array in x_control
     sensitive_attrs_to_cov_thresh: the covariance threshold that the classifier should achieve (this is only needed when apply_fairness_constraints=1, not needed for the other two constraints)
-    gamma: controls the loss in accuracy we are willing to incur when using apply_accuracy_constraint and sep_constraint
+    gamma: controls the loss in accuracy we are willing to incur when using apply_accuracy_constraint
 
     ----
 

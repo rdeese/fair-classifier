@@ -71,11 +71,11 @@ def test_synthetic_data():
                                  values=x_control_train['s1'], axis=1)
 
         covariance_tolerance = sensitive_attrs_to_cov_thresh['s1'] if 'sex' in sensitive_attrs_to_cov_thresh else 0
-        fle = FairLogitEstimator(constraint=constraint,
-                                 sensitive_col_idx=sensitive_col_idx,
-                                 covariance_tolerance=covariance_tolerance,
-                                 accuracy_tolerance = gamma)
-        fle.fit(x_train_copy, y_train)
+        fle = FairLogitEstimator(constraint=constraint)
+        fle.fit(x_train_copy, y_train,
+                sensitive_col_idx=sensitive_col_idx,
+                covariance_tolerance=covariance_tolerance,
+                accuracy_tolerance=gamma)
 
         # add dummy sensitive column to test x data
         x_test_dummy = np.insert(x_test, sensitive_col_idx, values=0, axis=1)
@@ -141,14 +141,14 @@ def test_synthetic_data():
     # plot_boundaries(w_uncons, w_f_cons, p_uncons, p_f_cons, acc_uncons, acc_f_cons, "img/f_cons.png")
 
 
-    """ Classify such that we optimize for fairness subject to a certain loss in accuracy """
-    apply_fairness_constraints = 0 # flag for fairness constraint is set back to0 since we want to apply the accuracy constraint now
-    apply_accuracy_constraint = 1 # now, we want to optimize fairness subject to accuracy constraints
-    sep_constraint = 0
-    gamma = 0.5 # gamma controls how much loss in accuracy we are willing to incur to achieve fairness -- increase gamme to allow more loss in accuracy
-    print "== Classifier with accuracy constraint =="
-    train_test_and_compare()
-    # plot_boundaries(w_uncons, w_a_cons, p_uncons, p_a_cons, acc_uncons, acc_a_cons, "img/a_cons.png")
+    # """ Classify such that we optimize for fairness subject to a certain loss in accuracy """
+    # apply_fairness_constraints = 0 # flag for fairness constraint is set back to0 since we want to apply the accuracy constraint now
+    # apply_accuracy_constraint = 1 # now, we want to optimize fairness subject to accuracy constraints
+    # sep_constraint = 0
+    # gamma = 0.5 # gamma controls how much loss in accuracy we are willing to incur to achieve fairness -- increase gamme to allow more loss in accuracy
+    # print "== Classifier with accuracy constraint =="
+    # train_test_and_compare()
+    # # plot_boundaries(w_uncons, w_a_cons, p_uncons, p_a_cons, acc_uncons, acc_a_cons, "img/a_cons.png")
 
     #  """ 
     #  Classify such that we optimize for fairness subject to a certain loss in accuracy 

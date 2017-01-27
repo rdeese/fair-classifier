@@ -5,13 +5,14 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.extmath import log_logistic, safe_sparse_dot
 from sklearn.utils.fixes import expit
-import fair_utils
+from sklearn.preprocessing import OneHotEncoder
+from scipy.optimize import minimize # for loss func minimization
+
 # from sklearn.utils.multiclass import unique_labels
 
 # pylint: disable=invalid-name
 # pylint: disable=no-self-use
 # pylint: disable=attribute-defined-outside-init
-# pylint: disable=line-too-long
 # pylint: disable=too-many-arguments
 
 def _intercept_dot(w, X, y):
@@ -100,6 +101,98 @@ def _logistic_loss_and_grad(w, X, y, alpha, sample_weight=None):
         grad[-1] = z0.sum()
     return out, grad
 
+def _separate_sensitive_attrs(X, sensitive_col_idx):
+    """
+    Parameters
+    ----------
+    X : array-like or sparse matrix of shape = [n_samples, n_features]
+        The training input samples.
+    sensitive_col_idx : array-like, shape = [n_sensitive attrs]
+        Specifies which column(s) of X contain(s) the sensitive
+        attribute.
+    Returns
+    -------
+    unsensitive_x : array of shape = [n_samples, n_features-n_senstitive_attrs]
+    sensitive_x : array of shape = [n_samples, n_senstitive_attrs]
+    """
+    sensitive_x = X[:, sensitive_col_idx]
+    unsensitive_x = np.delete(X, sensitive_col_idx, 1)
+
+    return unsensitive_x, sensitive_x
+
+def _get_fairness_constraint(unsensitive_x, sensitive_attr_vals,
+                             covariance_tolerance):
+    def constraint_fn(w, unsensitive_x, sensitive_attr_vals,
+                      covariance_tolerance):
+        """ Function passed to the minimizer, implements Eq. 2 from the paper """
+        y = np.dot(w, unsensitive_x.T)
+        covariance = np.dot(sensitive_attr_vals - np.mean(sensitive_attr_vals),
+                            y) / float(len(sensitive_attr_vals))
+
+        # non-negative (constraint satisfied) if positive
+        return covariance_tolerance - abs(covariance)
+
+    return {
+        'type': 'ineq',
+        'fun': constraint_fn,
+        'args': (unsensitive_x, sensitive_attr_vals, covariance_tolerance)
+    }
+
+def _get_fairness_constraints(unsensitive_x, sensitive_x, covariance_tolerance):
+    enc = OneHotEncoder(sparse=False) # output transformed data as an array
+    enc.fit(sensitive_x)
+    encoded_x = enc.transform(sensitive_x)
+
+    # map covariance tolerances to encoded columns
+    # nested, unmasked
+    encoded_covariance_tolerance = [enc.n_values_[ind]*[val]
+                                    for ind, val in enumerate(covariance_tolerance)]
+    # flattened, unmasked
+    encoded_covariance_tolerance = [item for sublist in encoded_covariance_tolerance
+                                    for item in sublist]
+    encoded_covariance_tolerance = np.take(encoded_covariance_tolerance,
+                                           enc.active_features_)
+
+    return [_get_fairness_constraint(unsensitive_x,
+                                     encoded_x[:, attr_index],
+                                     encoded_covariance_tolerance[attr_index])
+            for attr_index in range(encoded_x.shape[1])]
+
+
+
+
+def _train_model_for_fairness(X, y, sensitive_col_idx,
+                              covariance_tolerance):
+    unsensitive_x, sensitive_x = _separate_sensitive_attrs(X, sensitive_col_idx)
+    constraints = _get_fairness_constraints(unsensitive_x, sensitive_x,
+                                            covariance_tolerance)
+
+    alpha = 1.0 # alpha = 1 / C, a regularization parameter
+    w = minimize(fun=_logistic_loss_and_grad,
+                 x0=np.random.rand(unsensitive_x.shape[1],),
+                 args=(unsensitive_x, y, alpha),
+                 method='SLSQP',
+                 options={"maxiter": 10000},
+                 constraints=constraints,
+                 jac=True
+                )
+
+    return w.x
+
+def _train_model_without_fairness(X, y, sensitive_col_idx):
+    unsensitive_x, _ = _separate_sensitive_attrs(X, sensitive_col_idx)
+
+    alpha = 1.0 # alpha = 1 / C, a regularization parameter
+    w = minimize(fun=_logistic_loss_and_grad,
+                 x0=np.random.rand(unsensitive_x.shape[1],),
+                 args=(unsensitive_x, y, alpha),
+                 method='SLSQP',
+                 options={"maxiter": 10000},
+                 jac=True
+                )
+
+    return w.x
+
 class FairLogitEstimator(BaseEstimator, ClassifierMixin):
     """ A logistic regression estimator that also takes into account fairness
         over a (binary) sensitive attribute
@@ -111,41 +204,36 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         from the decision boundary. "accuracy" minimizes covariance between
         the sensitive attribute and distance from the decision boundary while
         constraining the loss function.
-    covariance_tolerance : float, optional
-        Threshhold below which the covariance should be constrained. Only
-        applicable if constraint="fairness".
-    covariance_tolerance : float, optional
+    accuracy_tolerance : float, optional
         If constraint="accuracy", the loss function is constrained to
-        (1+covariance_tolerance) the loss function of the optimal parameters
+        (1+accuracy_tolerance) the loss function of the optimal parameters
         without regard to fairness.
     """
-    def __init__(self, constraint='fairness',
-                 covariance_tolerance=0, accuracy_tolerance=0):
+    def __init__(self, constraint='fairness'):
         self.constraint = constraint
-        self.covariance_tolerance = covariance_tolerance
-        self.accuracy_tolerance = accuracy_tolerance
 
-    def _train_model_for_fairness(X, y, sensitive_col_idx,
-                                  covariance_tolerance):
-        # TODO: get constraints
-        constraints = _get_fairness_constraints(X, y, sensitive_col_idx)
-
-                                  
-
-
-    def fit(self, X, y, sensitive_col_idx=0):
+    def fit(self, X, y, sensitive_col_idx,
+            covariance_tolerance=None, accuracy_tolerance=None):
         """A reference implementation of a fitting function
         Parameters
         ----------
         X : array-like or sparse matrix of shape = [n_samples, n_features]
-            The training input samples. By convention, we'll assume that
-            the protected attr is last in each row.
+            The training input samples.
         y : array-like, shape = [n_samples] or [n_samples, n_outputs]
             The target values (class labels in classification, real numbers in
             regression).
         sensitive_col_idx : array-like, shape = [n_sensitive attrs]
             Specifies which column(s) of X contain(s) the sensitive
             attribute.
+        covariance_tolerance : array-like, optional, shape = [n_sensitive attrs]
+            Threshhold below which the covariance should be constrained
+            for each sensitive attr. Only valid if initialized with
+            constraint="fairness" If unspecified, will be 0.8 for
+            all sensitive attrs.
+        accuracy_tolerance : float, optional
+            If constraint="accuracy", the loss function is constrained to
+            (1+accuracy_tolerance) the loss function of the optimal parameters
+            without regard to fairness. If unspecified, will be 0.5.
         Returns
         -------
         self : object
@@ -153,6 +241,11 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         """
         # check if X & y have the correct shape
         X, y = check_X_y(X, y, y_numeric=True)
+        sensitive_col_idx = np.reshape(sensitive_col_idx, -1)
+        covariance_tolerance = np.reshape(covariance_tolerance, -1)
+        if not sensitive_col_idx.shape == covariance_tolerance.shape:
+            raise ValueError("Sensitive column indices & covariance tolerances "
+                             "have different shapes.")
         # Store the classes seen during fit
         # self.classes_ = unique_labels(y)
         if not np.issubdtype(X.dtype, np.number) or not np.issubdtype(y.dtype, np.number):
@@ -162,23 +255,13 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         if len(np.unique(y)) > 2:
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
-        # remove sensitive column to separate array
-        x_control = {'foo': X[:, self.sensitive_col_idx]}
-        X = np.delete(X, self.sensitive_col_idx, 1)
 
-        apply_fairness_constraints = 1 if self.constraint == 'fairness' else 0
-        apply_accuracy_constraint = 1 if self.constraint == 'accuracy' else 0
-        sep_constraint = 0 # currently not using this mode
-        sensitive_attrs = ["foo"] # doesn't matter what we name this since there
-                                  # can only be one
-        sensitive_attrs_to_cov_thresh = {'foo': self.covariance_tolerance}
-
-        self.w_ = fair_utils.train_model(X, y, x_control, _logistic_loss_and_grad,
-                                         apply_fairness_constraints,
-                                         apply_accuracy_constraint,
-                                         sep_constraint,
-                                         sensitive_attrs, sensitive_attrs_to_cov_thresh,
-                                         self.accuracy_tolerance)
+        self.sensitive_col_idx_ = sensitive_col_idx
+        if self.constraint == 'fairness':
+            self.w_ = _train_model_for_fairness(X, y, sensitive_col_idx,
+                                                covariance_tolerance)
+        elif self.constraint == 'none':
+            self.w_ = _train_model_without_fairness(X, y, sensitive_col_idx)
 
         # Return the estimator
         return self
@@ -199,7 +282,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         X = check_array(X)
 
         # remove sensitive col from test input
-        X = np.delete(X, self.sensitive_col_idx, 1)
+        X = np.delete(X, self.sensitive_col_idx_, 1)
 
         return np.sign(np.dot(X, self.w_))
 
@@ -219,7 +302,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         X = check_array(X)
 
         # remove sensitive col from test input
-        X = np.delete(X, self.sensitive_col_idx, 1)
+        X = np.delete(X, self.sensitive_col_idx_, 1)
 
         probs = np.dot(X, self.w_)
 
@@ -233,6 +316,6 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         X = check_array(X)
 
         # remove sensitive col from test input
-        X = np.delete(X, self.sensitive_col_idx, 1)
+        X = np.delete(X, self.sensitive_col_idx_, 1)
 
         return np.dot(X, self.w_)
