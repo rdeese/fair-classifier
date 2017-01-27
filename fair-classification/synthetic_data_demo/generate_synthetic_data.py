@@ -3,9 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt # for plotting stuff
 from random import seed, shuffle
 from scipy.stats import multivariate_normal # generating synthetic data
-SEED = 1122334455
-seed(SEED) # set the random seed so that the random permutations can be reproduced again
-np.random.seed(SEED)
+# SEED = 1122334455
+# seed(SEED) # set the random seed so that the random permutations can be reproduced again
+# np.random.seed(SEED)
 
 def generate_synthetic_data(plot_data=False):
 

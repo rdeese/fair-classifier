@@ -237,13 +237,14 @@ def print_classifier_fairness_stats(acc_arr, correlation_dict_arr, cov_dict_arr,
     non_prot_pos = correlation_dict[s_attr_name][1][1]
     prot_pos = correlation_dict[s_attr_name][0][1]
     p_rule = (prot_pos / non_prot_pos) * 100.0
+    covariance = np.mean([v[s_attr_name] for v in cov_dict_arr])
     
     print "Accuracy: %0.2f" % (np.mean(acc_arr))
     print "Protected/non-protected in +ve class: %0.0f%% / %0.0f%%" % (prot_pos, non_prot_pos)
     print "P-rule achieved: %0.0f%%" % (p_rule)
-    print "Covariance between sensitive feature and decision from distance boundary : %0.3f" % (np.mean([v[s_attr_name] for v in cov_dict_arr]))
+    print "Covariance between sensitive feature and decision from distance boundary : %0.3f" % (covariance)
     print
-    return p_rule
+    return covariance, p_rule
 
 def compute_p_rule(x_control, class_labels):
 
