@@ -241,7 +241,7 @@ def print_classifier_fairness_stats(acc_arr, correlation_dict_arr, cov_dict_arr,
     
     print "Accuracy: %0.2f" % (np.mean(acc_arr))
     print "Protected/non-protected in +ve class: %0.0f%% / %0.0f%%" % (prot_pos, non_prot_pos)
-    print "P-rule achieved: %0.0f%%" % (p_rule)
+    print "P-rule achieved: %0.02f%%" % (p_rule)
     print "Covariance between sensitive feature and decision from distance boundary : %0.3f" % (covariance)
     print
     return covariance, p_rule

@@ -14,7 +14,6 @@ np.random.seed(SEED)
 
 
 
-
 def train_model(x, y, x_control, loss_function, apply_fairness_constraints, apply_accuracy_constraint, sep_constraint, sensitive_attrs, sensitive_attrs_to_cov_thresh, gamma=None):
 
     """
@@ -61,13 +60,14 @@ def train_model(x, y, x_control, loss_function, apply_fairness_constraints, appl
 
     if apply_accuracy_constraint == 0: #its not the reverse problem, just train w with cross cov constraints
 
-        f_args=(x, y)
+        f_args=(x, y, 1.0)
         w = minimize(fun = loss_function,
             x0 = np.random.rand(x.shape[1],),
             args = f_args,
             method = 'SLSQP',
             options = {"maxiter":max_iter},
-            constraints = constraints
+            constraints = constraints,
+            jac = True
             )
 
     else:
@@ -75,44 +75,28 @@ def train_model(x, y, x_control, loss_function, apply_fairness_constraints, appl
         # train on just the loss function
         w = minimize(fun = loss_function,
             x0 = np.random.rand(x.shape[1],),
-            args = (x, y),
+            args = (x, y, 1.0),
             method = 'SLSQP',
             options = {"maxiter":max_iter},
-            constraints = []
+            constraints = [],
+            jac = True
             )
 
         old_w = deepcopy(w.x)
         
 
-        def constraint_gamma_all(w, x, y,  initial_loss_arr):
+        def constraint_gamma_all(w, x, y, old_loss):
             
             gamma_arr = np.ones_like(y) * gamma # set gamma for everyone
-            new_loss = loss_function(w, x, y)
-            old_loss = sum(initial_loss_arr)
-            return ((1.0 + gamma) * old_loss) - new_loss
-
-        def constraint_protected_people(w,x,y): # dont confuse the protected here with the sensitive feature protected/non-protected values -- protected here means that these points should not be misclassified to negative class
-            return np.dot(w, x.T) # if this is positive, the constraint is satisfied
-        def constraint_unprotected_people(w,ind,old_loss,x,y):
-            
-            new_loss = loss_function(w, np.array([x]), np.array(y))
+            new_loss, _ = loss_function(w, x, y, 1.0)
             return ((1.0 + gamma) * old_loss) - new_loss
 
         constraints = []
         predicted_labels = np.sign(np.dot(w.x, x.T))
-        unconstrained_loss_arr = loss_function(w.x, x, y, return_arr=True)
+        old_loss, _ = loss_function(w.x, x, y, 1.0)
 
-        if sep_constraint == True: # separate gemma for different people
-            for i in range(0, len(predicted_labels)):
-                if predicted_labels[i] == 1.0 and x_control[sensitive_attrs[0]][i] == 1.0: # for now we are assuming just one sensitive attr for reverse constraint, later, extend the code to take into account multiple sensitive attrs
-                    c = ({'type': 'ineq', 'fun': constraint_protected_people, 'args':(x[i], y[i])}) # this constraint makes sure that these people stay in the positive class even in the modified classifier             
-                    constraints.append(c)
-                else:
-                    c = ({'type': 'ineq', 'fun': constraint_unprotected_people, 'args':(i, unconstrained_loss_arr[i], x[i], y[i])})                
-                    constraints.append(c)
-        else: # same gamma for everyone
-            c = ({'type': 'ineq', 'fun': constraint_gamma_all, 'args':(x,y,unconstrained_loss_arr)})
-            constraints.append(c)
+        c = ({'type': 'ineq', 'fun': constraint_gamma_all, 'args':(x,y,old_loss)})
+        constraints.append(c)
 
         def cross_cov_abs_optm_func(weight_vec, x_in, x_control_in_arr):
             cross_cov = (x_control_in_arr - np.mean(x_control_in_arr)) * np.dot(weight_vec, x_in.T)

@@ -3,15 +3,98 @@
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.extmath import log_logistic, safe_sparse_dot
+from sklearn.utils.fixes import expit
+import fair_utils
 # from sklearn.utils.multiclass import unique_labels
-
-import utils
-from  loss_funcs import _logistic_loss as log_loss
 
 # pylint: disable=invalid-name
 # pylint: disable=no-self-use
 # pylint: disable=attribute-defined-outside-init
+# pylint: disable=line-too-long
+# pylint: disable=too-many-arguments
 
+def _intercept_dot(w, X, y):
+    """Computes y * np.dot(X, w).
+    It takes into consideration if the intercept should be fit or not.
+    Parameters
+    ----------
+    w : ndarray, shape (n_features,) or (n_features + 1,)
+        Coefficient vector.
+    X : {array-like, sparse matrix}, shape (n_samples, n_features)
+        Training data.
+    y : ndarray, shape (n_samples,)
+        Array of labels.
+    Returns
+    -------
+    w : ndarray, shape (n_features,)
+        Coefficient vector without the intercept weight (w[-1]) if the
+        intercept should be fit. Unchanged otherwise.
+    X : {array-like, sparse matrix}, shape (n_samples, n_features)
+        Training data. Unchanged.
+    yz : float
+        y * np.dot(X, w).
+    """
+    c = 0.
+    if w.size == X.shape[1] + 1:
+        c = w[-1]
+        w = w[:-1]
+
+    z = safe_sparse_dot(X, w) + c
+    yz = y * z
+    return w, c, yz
+
+def _logistic_loss_and_grad(w, X, y, alpha, sample_weight=None):
+    """Computes the logistic loss and gradient.
+
+    Copied from scikit-learn/scikit-learn
+    commit 7f224f8
+    file: sklearn/linear_model/logistic.py
+    url: https://github.com/scikit-learn/scikit-learn/
+         blob/14031f6/sklearn/linear_model/logistic.py#L78
+
+
+
+    Parameters
+    ----------
+    w : ndarray, shape (n_features,) or (n_features + 1,)
+        Coefficient vector.
+    X : {array-like, sparse matrix}, shape (n_samples, n_features)
+        Training data.
+    y : ndarray, shape (n_samples,)
+        Array of labels.
+    alpha : float
+        Regularization parameter. alpha is equal to 1 / C.
+    sample_weight : array-like, shape (n_samples,) optional
+        Array of weights that are assigned to individual samples.
+        If not provided, then each sample is given unit weight.
+    Returns
+    -------
+    out : float
+        Logistic loss.
+    grad : ndarray, shape (n_features,) or (n_features + 1,)
+        Logistic gradient.
+    """
+    n_samples, n_features = X.shape
+    grad = np.empty_like(w)
+
+    w, _c, yz = _intercept_dot(w, X, y)
+
+    if sample_weight is None:
+        sample_weight = np.ones(n_samples)
+
+    # Logistic loss is the negative of the log of the logistic function.
+    out = -np.sum(sample_weight * log_logistic(yz)) + .5 * alpha * np.dot(w, w)
+
+    z = expit(yz)
+    z0 = sample_weight * (z - 1) * y
+
+    grad[:n_features] = safe_sparse_dot(X.T, z0) + alpha * w
+
+    # Case where we fit the intercept.
+    if grad.shape[0] > n_features:
+        grad[-1] = z0.sum()
+    return out, grad
 
 class FairLogitEstimator(BaseEstimator, ClassifierMixin):
     """ A logistic regression estimator that also takes into account fairness
@@ -80,12 +163,12 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
                                   # can only be one
         sensitive_attrs_to_cov_thresh = {'foo': self.covariance_tolerance}
 
-        self.w_ = utils.train_model(X, y, x_control, log_loss,
-                                    apply_fairness_constraints,
-                                    apply_accuracy_constraint,
-                                    sep_constraint,
-                                    sensitive_attrs, sensitive_attrs_to_cov_thresh,
-                                    self.accuracy_tolerance)
+        self.w_ = fair_utils.train_model(X, y, x_control, _logistic_loss_and_grad,
+                                         apply_fairness_constraints,
+                                         apply_accuracy_constraint,
+                                         sep_constraint,
+                                         sensitive_attrs, sensitive_attrs_to_cov_thresh,
+                                         self.accuracy_tolerance)
 
         # Return the estimator
         return self
