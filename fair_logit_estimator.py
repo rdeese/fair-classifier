@@ -15,7 +15,13 @@ import fair_utils
 # pylint: disable=too-many-arguments
 
 def _intercept_dot(w, X, y):
-    """Computes y * np.dot(X, w).
+    """
+    Copied from scikit-learn/scikit-learn
+    commit 7f224f8
+    file: TODO fill me in
+    url: TODO fill me in
+
+    Computes y * np.dot(X, w).
     It takes into consideration if the intercept should be fit or not.
     Parameters
     ----------
@@ -52,8 +58,6 @@ def _logistic_loss_and_grad(w, X, y, alpha, sample_weight=None):
     file: sklearn/linear_model/logistic.py
     url: https://github.com/scikit-learn/scikit-learn/
          blob/14031f6/sklearn/linear_model/logistic.py#L78
-
-
 
     Parameters
     ----------
@@ -107,9 +111,6 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         from the decision boundary. "accuracy" minimizes covariance between
         the sensitive attribute and distance from the decision boundary while
         constraining the loss function.
-    sensitive_col_idx : int, optional
-        Specifies which column of X (during fitting) contains the sensitive
-        attribute.
     covariance_tolerance : float, optional
         Threshhold below which the covariance should be constrained. Only
         applicable if constraint="fairness".
@@ -118,15 +119,21 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         (1+covariance_tolerance) the loss function of the optimal parameters
         without regard to fairness.
     """
-    def __init__(self, constraint='fairness', sensitive_col_idx=0,
+    def __init__(self, constraint='fairness',
                  covariance_tolerance=0, accuracy_tolerance=0):
         self.constraint = constraint
-        self.sensitive_col_idx = sensitive_col_idx
         self.covariance_tolerance = covariance_tolerance
         self.accuracy_tolerance = accuracy_tolerance
 
+    def _train_model_for_fairness(X, y, sensitive_col_idx,
+                                  covariance_tolerance):
+        # TODO: get constraints
+        constraints = _get_fairness_constraints(X, y, sensitive_col_idx)
 
-    def fit(self, X, y):
+                                  
+
+
+    def fit(self, X, y, sensitive_col_idx=0):
         """A reference implementation of a fitting function
         Parameters
         ----------
@@ -136,6 +143,9 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         y : array-like, shape = [n_samples] or [n_samples, n_outputs]
             The target values (class labels in classification, real numbers in
             regression).
+        sensitive_col_idx : array-like, shape = [n_sensitive attrs]
+            Specifies which column(s) of X contain(s) the sensitive
+            attribute.
         Returns
         -------
         self : object
