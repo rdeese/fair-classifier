@@ -237,7 +237,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
         if covariance_tolerance is None:
-            covariance_tolerance = 0.8*np.ones(sensitive_col_idx.shape[0])
+            covariance_tolerance = 0.1*np.ones(sensitive_col_idx.shape[0])
 
         self.sensitive_col_idx_ = sensitive_col_idx
 
