@@ -130,6 +130,7 @@ def _get_fairness_constraint(unsensitive_x, sensitive_attr_vals,
                             y) / float(len(sensitive_attr_vals))
 
         # non-negative (constraint satisfied) if positive
+
         return covariance_tolerance - abs(covariance)
 
     return {
@@ -195,25 +196,10 @@ def _train_model_without_fairness(X, y, sensitive_col_idx):
 
 class FairLogitEstimator(BaseEstimator, ClassifierMixin):
     """ A logistic regression estimator that also takes into account fairness
-        over a (binary) sensitive attribute
-    Parameters
-    ----------
-    constraint : str, optional
-        Specifies which constraint to use: "fairness" minimizes the loss function
-        while constraining covariance between the sensitive attribute and distance
-        from the decision boundary. "accuracy" minimizes covariance between
-        the sensitive attribute and distance from the decision boundary while
-        constraining the loss function.
-    accuracy_tolerance : float, optional
-        If constraint="accuracy", the loss function is constrained to
-        (1+accuracy_tolerance) the loss function of the optimal parameters
-        without regard to fairness.
+        over sensitive attributes
     """
-    def __init__(self, constraint='fairness'):
-        self.constraint = constraint
 
-    def fit(self, X, y, sensitive_col_idx,
-            covariance_tolerance=None, accuracy_tolerance=None):
+    def fit(self, X, y, sensitive_col_idx, covariance_tolerance=None):
         """A reference implementation of a fitting function
         Parameters
         ----------
@@ -227,13 +213,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
             attribute.
         covariance_tolerance : array-like, optional, shape = [n_sensitive attrs]
             Threshhold below which the covariance should be constrained
-            for each sensitive attr. Only valid if initialized with
-            constraint="fairness" If unspecified, will be 0.8 for
+            for each sensitive attr. If unspecified, will be 0.2 for
             all sensitive attrs.
-        accuracy_tolerance : float, optional
-            If constraint="accuracy", the loss function is constrained to
-            (1+accuracy_tolerance) the loss function of the optimal parameters
-            without regard to fairness. If unspecified, will be 0.5.
         Returns
         -------
         self : object
@@ -255,13 +236,13 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         if len(np.unique(y)) > 2:
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
+        if covariance_tolerance is None:
+            covariance_tolerance = 0.8*np.ones(sensitive_col_idx.shape[0])
 
         self.sensitive_col_idx_ = sensitive_col_idx
-        if self.constraint == 'fairness':
-            self.w_ = _train_model_for_fairness(X, y, sensitive_col_idx,
-                                                covariance_tolerance)
-        elif self.constraint == 'none':
-            self.w_ = _train_model_without_fairness(X, y, sensitive_col_idx)
+
+        self.w_ = _train_model_for_fairness(X, y, sensitive_col_idx,
+                                            covariance_tolerance)
 
         # Return the estimator
         return self

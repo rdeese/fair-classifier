@@ -64,7 +64,10 @@ def generate_synthetic_data(plot_data=False):
         if r < p1: # the first cluster is the positive class
             x_control.append(1.0) # 1.0 means its male
         else:
-            x_control.append(0.0) # 0.0 -> female
+            if np.random.random() < 0.5:
+                x_control.append(0.0) # 0.0 -> female
+            else:
+                x_control.append(2.0) # 0.0 -> female
 
     x_control = np.array(x_control)
 

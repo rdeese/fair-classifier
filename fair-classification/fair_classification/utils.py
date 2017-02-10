@@ -516,7 +516,7 @@ def get_constraint_list_cov(x_train, y_train, x_control_train, sensitive_attrs, 
 
             for attr_val, ind in index_dict.items():
                 attr_name = attr_val                
-                thresh = sensitive_attrs_to_cov_thresh[attr][attr_name]
+                thresh = sensitive_attrs_to_cov_thresh[attr]
                 
                 t = attr_arr_transformed[:,ind]
                 c = ({'type': 'ineq', 'fun': test_sensitive_attr_constraint_cov, 'args':(x_train, y_train, t ,thresh, False)})

@@ -63,19 +63,17 @@ def test_synthetic_data():
         return print_classifier_metrics(w, test_score, distances_boundary_test)
 
     def train_test_fair_logit():
-        constraint = "none"
         sensitive_col_idx = 0
         if apply_fairness_constraints == 1: constraint = "fairness" 
         if apply_accuracy_constraint == 1: constraint = "accuracy" 
         x_train_copy = np.insert(x_train, sensitive_col_idx,
                                  values=x_control_train['s1'], axis=1)
 
-        covariance_tolerance = sensitive_attrs_to_cov_thresh['s1'] if 'sex' in sensitive_attrs_to_cov_thresh else 0
-        fle = FairLogitEstimator(constraint=constraint)
+        covariance_tolerance = sensitive_attrs_to_cov_thresh['s1'] if 's1' in sensitive_attrs_to_cov_thresh else 0
+        fle = FairLogitEstimator()
         fle.fit(x_train_copy, y_train,
                 sensitive_col_idx=sensitive_col_idx,
-                covariance_tolerance=covariance_tolerance,
-                accuracy_tolerance=gamma)
+                covariance_tolerance=covariance_tolerance)
 
         # add dummy sensitive column to test x data
         x_test_dummy = np.insert(x_test, sensitive_col_idx, values=0, axis=1)
@@ -128,13 +126,14 @@ def test_synthetic_data():
     apply_fairness_constraints = 0
     apply_accuracy_constraint = 0
     sep_constraint = 0
+    sensitive_attrs_to_cov_thresh = {"s1":100}
     train_test_and_compare()
     
     """ Now classify such that we optimize for accuracy while achieving perfect fairness """
     apply_fairness_constraints = 1 # set this flag to one since we want to optimize accuracy subject to fairness constraints
     apply_accuracy_constraint = 0
     sep_constraint = 0
-    sensitive_attrs_to_cov_thresh = {"s1":0}
+    sensitive_attrs_to_cov_thresh = {"s1":0.005}
     print
     print "== Classifier with fairness constraint =="
     train_test_and_compare()
