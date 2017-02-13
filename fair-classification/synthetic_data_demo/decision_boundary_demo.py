@@ -73,7 +73,7 @@ def test_synthetic_data():
         fle = FairLogitEstimator()
         fle.fit(x_train_copy, y_train,
                 sensitive_col_idx=sensitive_col_idx,
-                covariance_tolerance=covariance_tolerance)
+                correlation_tolerance=covariance_tolerance)
 
         # add dummy sensitive column to test x data
         x_test_dummy = np.insert(x_test, sensitive_col_idx, values=0, axis=1)
@@ -133,7 +133,7 @@ def test_synthetic_data():
     apply_fairness_constraints = 1 # set this flag to one since we want to optimize accuracy subject to fairness constraints
     apply_accuracy_constraint = 0
     sep_constraint = 0
-    sensitive_attrs_to_cov_thresh = {"s1":0.005}
+    sensitive_attrs_to_cov_thresh = {"s1":0.1}
     print
     print "== Classifier with fairness constraint =="
     train_test_and_compare()
