@@ -150,12 +150,12 @@ def _get_fairness_constraints(unsensitive_x, sensitive_x, correlation_tolerance)
     # map correlation tolerances to encoded columns
     # nested, unmasked
     encoded_correlation_tolerance = [enc.n_values_[ind]*[val]
-                                    for ind, val in enumerate(correlation_tolerance)]
+                                     for ind, val in enumerate(correlation_tolerance)]
     # flattened, unmasked
     encoded_correlation_tolerance = [item for sublist in encoded_correlation_tolerance
-                                    for item in sublist]
+                                     for item in sublist]
     encoded_correlation_tolerance = np.take(encoded_correlation_tolerance,
-                                           enc.active_features_)
+                                            enc.active_features_)
 
     return [_get_fairness_constraint(unsensitive_x,
                                      encoded_x[:, attr_index],
@@ -288,9 +288,10 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         # remove sensitive col from test input
         X = np.delete(X, self.sensitive_col_idx_, 1)
 
-        probs = np.dot(X, self.w_)
+        log_probs = np.dot(X, self.w_)
+        probs = 1./(1 + np.exp(-log_probs))
 
-        return np.array([(probs*-1+1)/2, (probs+1)/2])
+        return np.array([1 - probs, probs])
 
     def boundary_distances(self, X):
         """ Returns the dot product of each sample in X
