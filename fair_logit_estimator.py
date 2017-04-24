@@ -121,52 +121,55 @@ def _separate_sensitive_attrs(X, sensitive_col_idx):
     return unsensitive_x, sensitive_x
 
 def _get_fairness_constraint(unsensitive_x, sensitive_attr_vals,
-                             covariance_tolerance):
+                             correlation_tolerance):
     def constraint_fn(w, unsensitive_x, sensitive_attr_vals,
-                      covariance_tolerance):
+                      correlation_tolerance):
         """ Function passed to the minimizer, implements Eq. 2 from the paper """
         y = np.dot(w, unsensitive_x.T)
-        covariance = np.dot(sensitive_attr_vals - np.mean(sensitive_attr_vals),
+        debiased_sensitive_attr_vals = sensitive_attr_vals - np.mean(sensitive_attr_vals)
+        covariance = np.dot(debiased_sensitive_attr_vals,
                             y) / float(len(sensitive_attr_vals))
+        # We actually want to use the correlation, since it's normalized
+        correlation = covariance / (np.std(debiased_sensitive_attr_vals) * np.std(y))
 
         # non-negative (constraint satisfied) if positive
 
-        return covariance_tolerance - abs(covariance)
+        return correlation_tolerance - abs(correlation)
 
     return {
         'type': 'ineq',
         'fun': constraint_fn,
-        'args': (unsensitive_x, sensitive_attr_vals, covariance_tolerance)
+        'args': (unsensitive_x, sensitive_attr_vals, correlation_tolerance)
     }
 
-def _get_fairness_constraints(unsensitive_x, sensitive_x, covariance_tolerance):
+def _get_fairness_constraints(unsensitive_x, sensitive_x, correlation_tolerance):
     enc = OneHotEncoder(sparse=False) # output transformed data as an array
     enc.fit(sensitive_x)
     encoded_x = enc.transform(sensitive_x)
 
-    # map covariance tolerances to encoded columns
+    # map correlation tolerances to encoded columns
     # nested, unmasked
-    encoded_covariance_tolerance = [enc.n_values_[ind]*[val]
-                                    for ind, val in enumerate(covariance_tolerance)]
+    encoded_correlation_tolerance = [enc.n_values_[ind]*[val]
+                                     for ind, val in enumerate(correlation_tolerance)]
     # flattened, unmasked
-    encoded_covariance_tolerance = [item for sublist in encoded_covariance_tolerance
-                                    for item in sublist]
-    encoded_covariance_tolerance = np.take(encoded_covariance_tolerance,
-                                           enc.active_features_)
+    encoded_correlation_tolerance = [item for sublist in encoded_correlation_tolerance
+                                     for item in sublist]
+    encoded_correlation_tolerance = np.take(encoded_correlation_tolerance,
+                                            enc.active_features_)
 
     return [_get_fairness_constraint(unsensitive_x,
                                      encoded_x[:, attr_index],
-                                     encoded_covariance_tolerance[attr_index])
+                                     encoded_correlation_tolerance[attr_index])
             for attr_index in range(encoded_x.shape[1])]
 
 
 
 
 def _train_model_for_fairness(X, y, sensitive_col_idx,
-                              covariance_tolerance):
+                              correlation_tolerance):
     unsensitive_x, sensitive_x = _separate_sensitive_attrs(X, sensitive_col_idx)
     constraints = _get_fairness_constraints(unsensitive_x, sensitive_x,
-                                            covariance_tolerance)
+                                            correlation_tolerance)
 
     alpha = 1.0 # alpha = 1 / C, a regularization parameter
     w = minimize(fun=_logistic_loss_and_grad,
@@ -199,7 +202,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         over sensitive attributes
     """
 
-    def fit(self, X, y, sensitive_col_idx, covariance_tolerance=None):
+    def fit(self, X, y, sensitive_col_idx, correlation_tolerance=None):
         """A reference implementation of a fitting function
         Parameters
         ----------
@@ -211,8 +214,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         sensitive_col_idx : array-like, shape = [n_sensitive attrs]
             Specifies which column(s) of X contain(s) the sensitive
             attribute.
-        covariance_tolerance : array-like, optional, shape = [n_sensitive attrs]
-            Threshhold below which the covariance should be constrained
+        correlation_tolerance : array-like, optional, shape = [n_sensitive attrs]
+            Threshhold below which the correlation should be constrained
             for each sensitive attr. If unspecified, will be 0.2 for
             all sensitive attrs.
         Returns
@@ -223,9 +226,9 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         # check if X & y have the correct shape
         X, y = check_X_y(X, y, y_numeric=True)
         sensitive_col_idx = np.reshape(sensitive_col_idx, -1)
-        covariance_tolerance = np.reshape(covariance_tolerance, -1)
-        if not sensitive_col_idx.shape == covariance_tolerance.shape:
-            raise ValueError("Sensitive column indices & covariance tolerances "
+        correlation_tolerance = np.reshape(correlation_tolerance, -1)
+        if not sensitive_col_idx.shape == correlation_tolerance.shape:
+            raise ValueError("Sensitive column indices & correlation tolerances "
                              "have different shapes.")
         # Store the classes seen during fit
         # self.classes_ = unique_labels(y)
@@ -236,13 +239,13 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         if len(np.unique(y)) > 2:
             raise ValueError("Only two y values are permissible for a binary logit classifier.")
 
-        if covariance_tolerance is None:
-            covariance_tolerance = 0.1*np.ones(sensitive_col_idx.shape[0])
+        if correlation_tolerance is None:
+            correlation_tolerance = 0.1*np.ones(sensitive_col_idx.shape[0])
 
         self.sensitive_col_idx_ = sensitive_col_idx
 
         self.w_ = _train_model_for_fairness(X, y, sensitive_col_idx,
-                                            covariance_tolerance)
+                                            correlation_tolerance)
 
         # Return the estimator
         return self
@@ -285,9 +288,10 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         # remove sensitive col from test input
         X = np.delete(X, self.sensitive_col_idx_, 1)
 
-        probs = np.dot(X, self.w_)
+        log_probs = np.dot(X, self.w_)
+        probs = 1./(1 + np.exp(-log_probs))
 
-        return np.array([(probs*-1+1)/2, (probs+1)/2])
+        return np.array([1 - probs, probs])
 
     def boundary_distances(self, X):
         """ Returns the dot product of each sample in X
