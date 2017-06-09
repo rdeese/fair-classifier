@@ -4,6 +4,7 @@
 
 import numpy as np
 from fair_logit_estimator import _get_fairness_constraint
+from fair_logit_estimator import FairLogitEstimator
 
 class TestFairnessConstraint:
     def test_perfect_correlation(self):
@@ -53,3 +54,8 @@ class TestFairnessConstraint:
         large_x_correlation = constraint_fn(w, 100*unsensitive_x, 100*sensitive_x, 0)
         assert np.isclose(small_x_correlation, large_x_correlation,
                           atol=1e-10, rtol=1e-10)
+
+class TestSklearnCompliance:
+    def test_check_estimator(self):
+        from estimator_checks import check_estimator
+        check_estimator(FairLogitEstimator)
