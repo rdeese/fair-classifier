@@ -2,7 +2,8 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted, check_consistent_length
+from sklearn.utils.validation import (check_X_y, check_array,
+                                      check_is_fitted, check_consistent_length)
 from sklearn.utils.extmath import log_logistic, safe_sparse_dot
 from sklearn.utils.fixes import expit
 from sklearn.preprocessing import OneHotEncoder
@@ -196,10 +197,37 @@ def _train_model_without_fairness(X, y, sensitive_col_idx):
     return w.x
 
 class FairLogitEstimator(BaseEstimator, ClassifierMixin):
-    """ A logistic regression estimator that also takes into account fairness
-        over sensitive attributes
+    """ A logistic regression estimator that can constrain the covariance between
+        its predictions and the value of one or more protected attributes.
+
+        Limiting covariance between predictions and protected attributes results
+        in fair predictions with respect to "disparate impact": roughly equal fractions
+        of each subgroup are given a "positve" classification.
+
+        Since "fairness" is poorly defined for situations in which there is not a
+        dichotomy of "good" and "bad" outcomes, this class does not support
+        multiclass classification, only binary classification.
+
+        This class performs regularized logisitic regression using SLSQP, with the
+        addition of convex fairness constraints.
+
+
+        Attributes
+        ----------
+        sensitive_col_idx_ : array, shape (n_sensitive_attrs,)
+            The indices of the attributes in the training data which
+            should be protected.
+
+        w_ : array, shape (n_unsensitive_attrs,)
+            List of coefficients for the trained logistic regression model.
+
+        Reference
+        ---------
+        Zafar et al. (2017). Fairness constraints: mechanisms for fair classification.
+        https://arxiv.org/abs/1507.05259
     """
 
+    # pylint: disable=dangerous-default-value
     def fit(self, X, y, sensitive_col_idx=[], covariance_tolerance=None):
         """
         Parameters
@@ -209,10 +237,10 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         y : array-like, shape = [n_samples] or [n_samples, n_outputs]
             The target values (class labels in classification, real numbers in
             regression).
-        sensitive_col_idx : array-like, shape = [n_sensitive attrs]
+        sensitive_col_idx : array-like, optional, shape = [n_sensitive_attrs]
             Specifies which column(s) of X contain(s) the sensitive
             attribute.
-        covariance_tolerance : array-like, optional, shape = [n_sensitive attrs]
+        covariance_tolerance : array-like, optional, shape = [n_sensitive_attrs]
             Threshhold below which the covariance should be constrained
             for each sensitive attr. If unspecified, will be 0.1 for
             all sensitive attrs.
@@ -249,6 +277,7 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
 
         # Return the estimator
         return self
+    # pylint: enable=dangerous-default-value
 
     def predict(self, X):
         """ Predicts labels for all samples in X
