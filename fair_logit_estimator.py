@@ -2,7 +2,7 @@
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted, check_consistent_length
 from sklearn.utils.extmath import log_logistic, safe_sparse_dot
 from sklearn.utils.fixes import expit
 from sklearn.preprocessing import OneHotEncoder
@@ -200,8 +200,8 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
         over sensitive attributes
     """
 
-    def fit(self, X, y, sensitive_col_idx, covariance_tolerance=None):
-        """A reference implementation of a fitting function
+    def fit(self, X, y, sensitive_col_idx=[], covariance_tolerance=None):
+        """
         Parameters
         ----------
         X : array-like or sparse matrix of shape = [n_samples, n_features]
@@ -214,20 +214,22 @@ class FairLogitEstimator(BaseEstimator, ClassifierMixin):
             attribute.
         covariance_tolerance : array-like, optional, shape = [n_sensitive attrs]
             Threshhold below which the covariance should be constrained
-            for each sensitive attr. If unspecified, will be 0.2 for
+            for each sensitive attr. If unspecified, will be 0.1 for
             all sensitive attrs.
         Returns
         -------
         self : object
             Returns self.
         """
-        # check if X & y have the correct shape
         X, y = check_X_y(X, y, y_numeric=True)
-        sensitive_col_idx = np.reshape(sensitive_col_idx, -1)
-        covariance_tolerance = np.reshape(covariance_tolerance, -1)
-        if not sensitive_col_idx.shape == covariance_tolerance.shape:
-            raise ValueError("Sensitive column indices & covariance tolerances "
-                             "have different shapes.")
+        sensitive_col_idx = check_array(sensitive_col_idx,
+                                        ensure_2d=False,
+                                        ensure_min_samples=0)
+        covariance_tolerance = check_array(covariance_tolerance,
+                                           ensure_2d=False,
+                                           ensure_min_samples=0)
+        check_consistent_length(sensitive_col_idx, covariance_tolerance)
+
         # Store the classes seen during fit
         # self.classes_ = unique_labels(y)
         if not np.issubdtype(X.dtype, np.number) or not np.issubdtype(y.dtype, np.number):
